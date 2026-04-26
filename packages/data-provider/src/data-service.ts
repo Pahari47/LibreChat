@@ -1068,7 +1068,7 @@ export const deleteContact = (contactId: string): Promise<void> => {
   return request.delete(endpoints.contact(contactId));
 };
 
-export const importContactsFile = (data: FormData): Promise<{ message: string }> => {
+export const importContactsFile = (data: FormData): Promise<q.ContactImportResponse> => {
   return request.postMultiPart(endpoints.contactsImport(), data);
 };
 

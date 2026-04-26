@@ -20,7 +20,19 @@ const router = express.Router();
 const payloadLimit = express.json({ limit: '1mb' });
 const importChunkSize = 1000;
 const importTempRoot = path.join(os.tmpdir(), 'librechat-contacts-import');
-const coreFields = new Set(['id', 'name', 'company', 'role', 'email', 'notes', 'created_at']);
+const fieldAliases = {
+  id: ['id', 'contact_id'],
+  name: ['name', 'full_name', 'contact_name'],
+  company: ['company', 'organization', 'org'],
+  role: ['role', 'title', 'job_title', 'position'],
+  email: ['email', 'email_address', 'work_email'],
+  notes: ['notes', 'note', 'description'],
+  created_at: ['created_at', 'createdat', 'created_on'],
+  updated_at: ['updated_at', 'updatedat', 'updated_on'],
+  first_name: ['first_name', 'firstname', 'first'],
+  last_name: ['last_name', 'lastname', 'last'],
+};
+const aliasFieldSet = new Set(Object.values(fieldAliases).flat());
 
 const normalizeHeader = (value) => {
   if (!value) {
@@ -37,14 +49,28 @@ const normalizeValue = (value) => {
   return stringValue.length > 0 ? stringValue : undefined;
 };
 
+const getFieldValue = (record, aliases = []) => {
+  for (const alias of aliases) {
+    const value = normalizeValue(record[alias]);
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+};
+
 const mapRecordToContact = (record) => {
-  const name = normalizeValue(record.name);
+  const nameFromField = getFieldValue(record, fieldAliases.name);
+  const firstName = getFieldValue(record, fieldAliases.first_name);
+  const lastName = getFieldValue(record, fieldAliases.last_name);
+  const fullNameFromParts = [firstName, lastName].filter(Boolean).join(' ').trim();
+  const name = nameFromField || (fullNameFromParts.length > 0 ? fullNameFromParts : undefined);
   if (!name) {
     return null;
   }
 
   const attributes = Object.entries(record).reduce((acc, [key, value]) => {
-    if (coreFields.has(key)) {
+    if (aliasFieldSet.has(key)) {
       return acc;
     }
 
@@ -59,10 +85,10 @@ const mapRecordToContact = (record) => {
 
   return {
     name,
-    company: normalizeValue(record.company),
-    role: normalizeValue(record.role),
-    email: normalizeValue(record.email),
-    notes: normalizeValue(record.notes),
+    company: getFieldValue(record, fieldAliases.company),
+    role: getFieldValue(record, fieldAliases.role),
+    email: getFieldValue(record, fieldAliases.email),
+    notes: getFieldValue(record, fieldAliases.notes),
     attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
   };
 };

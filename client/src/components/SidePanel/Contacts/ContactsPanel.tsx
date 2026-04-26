@@ -76,7 +76,16 @@ export default function ContactsPanel() {
 
   const importMutation = useImportContactsMutation({
     onSuccess: (result) => {
-      showToast({ status: 'success', message: result.message });
+      const importedRows = result.stats?.importedRows ?? 0;
+      const skippedRows = result.stats?.skippedRows ?? 0;
+      const message =
+        importedRows > 0
+          ? `${result.message} (${importedRows} imported${skippedRows > 0 ? `, ${skippedRows} skipped` : ''})`
+          : `${result.message} (0 imported, ${skippedRows} skipped)`;
+      showToast({
+        status: importedRows > 0 ? 'success' : 'warning',
+        message,
+      });
     },
     onError: (error: Error) => {
       showToast({ status: 'error', message: error.message || localize('com_ui_error') });

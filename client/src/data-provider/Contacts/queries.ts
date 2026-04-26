@@ -7,6 +7,7 @@ import type {
 } from '@tanstack/react-query';
 import type {
   ContactAttributes,
+  ContactImportResponse,
   ContactListParams,
   ContactListResponse,
   TContact,
@@ -108,7 +109,7 @@ export const useDeleteContactMutation = (options?: UseMutationOptions<void, Erro
 };
 
 export const useImportContactsMutation = (
-  options?: UseMutationOptions<{ message: string }, Error, FormData>,
+  options?: UseMutationOptions<ContactImportResponse, Error, FormData>,
 ) => {
   const queryClient = useQueryClient();
   return useMutation(

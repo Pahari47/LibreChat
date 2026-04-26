@@ -176,6 +176,17 @@ export type ContactListResponse = {
   hasNextPage: boolean;
 };
 
+export type ContactImportResponse = {
+  message: string;
+  stats?: {
+    processedRows: number;
+    importedRows: number;
+    skippedRows: number;
+    upsertedCount: number;
+    matchedCount: number;
+  };
+};
+
 export type PrincipalSearchParams = {
   q: string;
   limit?: number;
