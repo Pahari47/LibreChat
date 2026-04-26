@@ -1030,6 +1030,48 @@ export const createMemory = (data: {
   return request.post(endpoints.memories(), data);
 };
 
+/* Contacts */
+export const listContacts = (params?: q.ContactListParams): Promise<q.ContactListResponse> => {
+  return request.get(endpoints.contacts(params));
+};
+
+export const getContact = (contactId: string): Promise<q.TContact> => {
+  return request.get(endpoints.contact(contactId));
+};
+
+export const createContact = (data: {
+  name: string;
+  company?: string;
+  role?: string;
+  email?: string;
+  notes?: string;
+  attributes?: q.ContactAttributes;
+}): Promise<q.TContact> => {
+  return request.post(endpoints.contacts(), data);
+};
+
+export const updateContact = (
+  contactId: string,
+  data: {
+    name?: string;
+    company?: string;
+    role?: string;
+    email?: string;
+    notes?: string;
+    attributes?: q.ContactAttributes;
+  },
+): Promise<q.TContact> => {
+  return request.patch(endpoints.contact(contactId), data);
+};
+
+export const deleteContact = (contactId: string): Promise<void> => {
+  return request.delete(endpoints.contact(contactId));
+};
+
+export const importContactsFile = (data: FormData): Promise<{ message: string }> => {
+  return request.postMultiPart(endpoints.contactsImport(), data);
+};
+
 export function searchPrincipals(
   params: q.PrincipalSearchParams,
 ): Promise<q.PrincipalSearchResponse> {
