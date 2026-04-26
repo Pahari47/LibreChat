@@ -145,6 +145,37 @@ export type MemoriesResponse = {
   usagePercentage: number | null;
 };
 
+/* Contacts */
+export type ContactAttributes = Record<string, string>;
+
+export type TContact = {
+  _id: string;
+  name: string;
+  company?: string;
+  role?: string;
+  email?: string;
+  notes?: string;
+  attributes?: ContactAttributes;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ContactListParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  company?: string;
+  role?: string;
+};
+
+export type ContactListResponse = {
+  contacts: TContact[];
+  total: number;
+  page: number;
+  limit: number;
+  hasNextPage: boolean;
+};
+
 export type PrincipalSearchParams = {
   q: string;
   limit?: number;
