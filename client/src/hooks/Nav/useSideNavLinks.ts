@@ -3,6 +3,7 @@ import { MCPIcon, AttachmentIcon, OpenAIMinimalIcon } from '@librechat/client';
 import {
   Bot,
   Brain,
+  BookUser,
   Bookmark,
   NotebookPen,
   ArrowRightToLine,
@@ -24,6 +25,7 @@ import BookmarkPanel from '~/components/SidePanel/Bookmarks/BookmarkPanel';
 import PanelSwitch from '~/components/SidePanel/Builder/PanelSwitch';
 import Parameters from '~/components/SidePanel/Parameters/Panel';
 import { MemoryPanel } from '~/components/SidePanel/Memories';
+import { ContactsPanel } from '~/components/SidePanel/Contacts';
 import FilesPanel from '~/components/SidePanel/Files/Panel';
 import { useHasAccess, useMCPServerManager } from '~/hooks';
 import { PromptsAccordion } from '~/components/Prompts';
@@ -135,6 +137,14 @@ export default function useSideNavLinks({
         Component: MemoryPanel,
       });
     }
+
+    links.push({
+      title: 'com_ui_contacts',
+      label: '',
+      icon: BookUser,
+      id: 'contacts',
+      Component: ContactsPanel,
+    });
 
     if (hasAccessToBookmarks) {
       links.push({
