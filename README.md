@@ -64,6 +64,15 @@ Open:
 4. During chat request construction, relevant contacts are retrieved and injected as compact context.
 5. Gemini answers using that injected contact context.
 
+<img width="753" height="536" alt="image" src="https://github.com/user-attachments/assets/c4ff8910-39d2-4a9d-a55a-6987bd74df65" />
+
+
+## ui preview
+
+<img width="1359" height="562" alt="Screenshot 2026-04-26 203425" src="https://github.com/user-attachments/assets/d8cde0a2-4771-4583-9a61-7cd547765368" />
+
+
+
 
 ## Design Questions
 
