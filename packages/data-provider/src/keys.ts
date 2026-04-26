@@ -53,6 +53,8 @@ export enum QueryKeys {
   banner = 'banner',
   /* Memories */
   memories = 'memories',
+  contacts = 'contacts',
+  contact = 'contact',
   principalSearch = 'principalSearch',
   accessRoles = 'accessRoles',
   resourcePermissions = 'resourcePermissions',
@@ -70,6 +72,7 @@ export enum QueryKeys {
 // Dynamic query keys that require parameters
 export const DynamicQueryKeys = {
   agentFiles: (agentId: string) => ['agentFiles', agentId] as const,
+  contact: (contactId: string) => ['contact', contactId] as const,
 } as const;
 
 export enum MutationKeys {
@@ -97,4 +100,5 @@ export enum MutationKeys {
   enableTwoFactor = 'enableTwoFactor',
   verifyTwoFactor = 'verifyTwoFactor',
   updateMemoryPreferences = 'updateMemoryPreferences',
+  importContacts = 'importContacts',
 }
