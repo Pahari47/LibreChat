@@ -23,6 +23,7 @@ import { createConversationTagModel } from './conversationTag';
 import { createSharedLinkModel } from './sharedLink';
 import { createToolCallModel } from './toolCall';
 import { createMemoryModel } from './memory';
+import { createContactModel } from './contact';
 import { createAccessRoleModel } from './accessRole';
 import { createAclEntryModel } from './aclEntry';
 import { createSystemGrantModel } from './systemGrant';
@@ -59,6 +60,7 @@ export function createModels(mongoose: typeof import('mongoose')) {
     SharedLink: createSharedLinkModel(mongoose),
     ToolCall: createToolCallModel(mongoose),
     MemoryEntry: createMemoryModel(mongoose),
+    Contact: createContactModel(mongoose),
     AccessRole: createAccessRoleModel(mongoose),
     AclEntry: createAclEntryModel(mongoose),
     SystemGrant: createSystemGrantModel(mongoose),
