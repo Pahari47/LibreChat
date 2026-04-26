@@ -10,6 +10,7 @@ export interface Contact {
   email?: string;
   notes?: string;
   attributes?: ContactAttributes;
+  attributes_search?: string;
   created_at?: Date;
   updated_at?: Date;
   tenantId?: string;
@@ -78,5 +79,11 @@ export interface ContactListResult {
   page: number;
   limit: number;
   hasNextPage: boolean;
+}
+
+export interface RelevantContactsParams {
+  userId: string | Types.ObjectId;
+  query: string;
+  limit?: number;
 }
 

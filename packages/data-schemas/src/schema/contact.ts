@@ -41,6 +41,10 @@ const contactSchema = new Schema<IContact>(
       of: String,
       default: {},
     },
+    attributes_search: {
+      type: String,
+      default: '',
+    },
     tenantId: {
       type: String,
       index: true,
@@ -58,6 +62,7 @@ contactSchema.index({ userId: 1, name: 1 });
 contactSchema.index({ userId: 1, company: 1 });
 contactSchema.index({ userId: 1, role: 1 });
 contactSchema.index({ userId: 1, email: 1 });
+contactSchema.index({ userId: 1, attributes_search: 1 });
 
 export default contactSchema;
 

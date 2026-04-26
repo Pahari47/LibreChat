@@ -46,6 +46,16 @@ const normalizeAttributes = (attributes?: t.ContactAttributes): t.ContactAttribu
   return Object.fromEntries(entries);
 };
 
+const buildAttributesSearch = (attributes?: t.ContactAttributes): string => {
+  if (!attributes) {
+    return '';
+  }
+  return Object.entries(attributes)
+    .map(([key, value]) => `${key} ${value}`)
+    .join(' ')
+    .trim();
+};
+
 export function createContactMethods(mongoose: typeof import('mongoose')) {
   const Contact = mongoose.models.Contact as Model<t.IContact>;
 
@@ -63,6 +73,7 @@ export function createContactMethods(mongoose: typeof import('mongoose')) {
       email: params.email?.trim().toLowerCase() || undefined,
       notes: params.notes?.trim() || undefined,
       attributes: normalizeAttributes(params.attributes),
+      attributes_search: buildAttributesSearch(normalizeAttributes(params.attributes)),
     });
 
     return created.toObject() as t.IContactLean;
@@ -102,6 +113,7 @@ export function createContactMethods(mongoose: typeof import('mongoose')) {
         { role: searchRegex },
         { email: searchRegex },
         { notes: searchRegex },
+        { attributes_search: searchRegex },
       ];
     }
 
@@ -142,7 +154,9 @@ export function createContactMethods(mongoose: typeof import('mongoose')) {
       updatePayload.notes = params.notes.trim() || undefined;
     }
     if (params.attributes !== undefined) {
-      updatePayload.attributes = normalizeAttributes(params.attributes);
+      const normalizedAttributes = normalizeAttributes(params.attributes);
+      updatePayload.attributes = normalizedAttributes;
+      updatePayload.attributes_search = buildAttributesSearch(normalizedAttributes);
     }
 
     if (Object.keys(updatePayload).length === 0) {
@@ -170,35 +184,37 @@ export function createContactMethods(mongoose: typeof import('mongoose')) {
     }
 
     const operations: AnyBulkWriteOperation<t.IContact>[] = contacts.flatMap((contact) => {
-        const normalizedName = contact.name.trim();
-        if (!normalizedName) {
-          return [];
-        }
+      const normalizedName = contact.name.trim();
+      if (!normalizedName) {
+        return [];
+      }
 
-        const normalizedEmail = contact.email?.trim().toLowerCase() || undefined;
-        const setPayload: Partial<t.Contact> = {
-          name: normalizedName,
-          company: contact.company?.trim() || undefined,
-          role: contact.role?.trim() || undefined,
-          email: normalizedEmail,
-          notes: contact.notes?.trim() || undefined,
-          attributes: normalizeAttributes(contact.attributes),
-        };
+      const normalizedEmail = contact.email?.trim().toLowerCase() || undefined;
+      const normalizedAttributes = normalizeAttributes(contact.attributes);
+      const setPayload: Partial<t.Contact> = {
+        name: normalizedName,
+        company: contact.company?.trim() || undefined,
+        role: contact.role?.trim() || undefined,
+        email: normalizedEmail,
+        notes: contact.notes?.trim() || undefined,
+        attributes: normalizedAttributes,
+        attributes_search: buildAttributesSearch(normalizedAttributes),
+      };
 
-        const identifier: RootFilterQuery<t.IContact> = normalizedEmail
-          ? { userId, email: normalizedEmail, name: normalizedName }
-          : { userId, name: normalizedName, company: setPayload.company ?? null };
+      const identifier: RootFilterQuery<t.IContact> = normalizedEmail
+        ? { userId, email: normalizedEmail, name: normalizedName }
+        : { userId, name: normalizedName, company: setPayload.company ?? null };
 
-        return [
-          {
+      return [
+        {
           updateOne: {
             filter: identifier,
             update: { $set: setPayload },
             upsert: true,
           },
-          } satisfies AnyBulkWriteOperation<t.IContact>,
-        ];
-      });
+        } satisfies AnyBulkWriteOperation<t.IContact>,
+      ];
+    });
 
     if (operations.length === 0) {
       return { matchedCount: 0, upsertedCount: 0 };
@@ -211,6 +227,35 @@ export function createContactMethods(mongoose: typeof import('mongoose')) {
     };
   }
 
+  async function getRelevantContacts({
+    userId,
+    query,
+    limit = 12,
+  }: t.RelevantContactsParams): Promise<t.IContactLean[]> {
+    const normalizedLimit = Math.min(Math.max(limit, 1), 30);
+    const searchRegex = normalizeRegex(query);
+    if (!searchRegex) {
+      return [];
+    }
+
+    const contacts = await Contact.find({
+      userId,
+      $or: [
+        { name: searchRegex },
+        { company: searchRegex },
+        { role: searchRegex },
+        { email: searchRegex },
+        { notes: searchRegex },
+        { attributes_search: searchRegex },
+      ],
+    })
+      .sort({ updated_at: -1 })
+      .limit(normalizedLimit)
+      .lean<t.IContactLean[]>();
+
+    return contacts;
+  }
+
   return {
     createContact,
     getContactById,
@@ -218,6 +263,7 @@ export function createContactMethods(mongoose: typeof import('mongoose')) {
     updateContact,
     deleteContact,
     bulkUpsertContacts,
+    getRelevantContacts,
   };
 }
 

@@ -58,6 +58,46 @@ const { getMCPManager } = require('~/config');
 const db = require('~/models');
 
 const loadAgent = (params) => loadAgentFn(params, { getAgent: db.getAgent, getMCPServerTools });
+const maxContactContextItems = 8;
+
+const toAttributeEntries = (attributes) => {
+  if (!attributes) {
+    return [];
+  }
+  if (attributes instanceof Map) {
+    return Array.from(attributes.entries());
+  }
+  return Object.entries(attributes);
+};
+
+const formatContactContext = (contacts = []) => {
+  if (contacts.length === 0) {
+    return '';
+  }
+
+  const lines = ['# Relevant contacts from your workspace'];
+  for (const contact of contacts) {
+    const details = [
+      `Name: ${contact.name}`,
+      `Company: ${contact.company || 'N/A'}`,
+      `Role: ${contact.role || 'N/A'}`,
+      `Email: ${contact.email || 'N/A'}`,
+    ];
+    if (contact.notes) {
+      details.push(`Notes: ${contact.notes}`);
+    }
+    const attributePairs = toAttributeEntries(contact.attributes)
+      .filter(([key, value]) => key && value)
+      .slice(0, 4)
+      .map(([key, value]) => `${key}: ${value}`);
+    if (attributePairs.length > 0) {
+      details.push(`Attributes: ${attributePairs.join('; ')}`);
+    }
+    lines.push(`- ${details.join(' | ')}`);
+  }
+  lines.push('Use these contacts only when relevant to the user request.');
+  return lines.join('\n');
+};
 
 class AgentClient extends BaseClient {
   constructor(options = {}) {
@@ -339,6 +379,11 @@ class AgentClient extends BaseClient {
       }
     }
 
+    const contactContext = await this.useContacts(latestMessage?.text);
+    if (contactContext) {
+      sharedRunContextParts.push(contactContext);
+    }
+
     /** Memory context (user preferences/memories) */
     const withoutKeys = await this.useMemory();
     if (withoutKeys) {
@@ -555,6 +600,38 @@ class AgentClient extends BaseClient {
 
     this.processMemory = processMemory;
     return withoutKeys;
+  }
+
+  /**
+   * @param {string | undefined} query
+   * @returns {Promise<string | undefined>}
+   */
+  async useContacts(query) {
+    try {
+      const trimmedQuery = query?.trim();
+      if (!trimmedQuery || typeof db.getRelevantContacts !== 'function') {
+        return;
+      }
+
+      const userId = this.options.req?.user?.id;
+      if (!userId) {
+        return;
+      }
+
+      const contacts = await db.getRelevantContacts({
+        userId,
+        query: trimmedQuery,
+        limit: maxContactContextItems,
+      });
+      if (!contacts || contacts.length === 0) {
+        return;
+      }
+
+      return formatContactContext(contacts);
+    } catch (error) {
+      logger.error('[api/server/controllers/agents/client.js #useContacts] Error', error);
+      return;
+    }
   }
 
   /**
