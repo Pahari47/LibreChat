@@ -1,7 +1,10 @@
 const path = require('path');
+const os = require('os');
 const fs = require('fs');
+const crypto = require('crypto');
 const multer = require('multer');
 const express = require('express');
+const { parse } = require('csv-parse');
 const { logger, isValidObjectIdString } = require('@librechat/data-schemas');
 const { requireJwtAuth } = require('~/server/middleware');
 const {
@@ -10,13 +13,73 @@ const {
   listContacts,
   updateContact,
   deleteContact,
+  bulkUpsertContacts,
 } = require('~/models');
 
 const router = express.Router();
 const payloadLimit = express.json({ limit: '1mb' });
+const importChunkSize = 1000;
+const importTempRoot = path.join(os.tmpdir(), 'librechat-contacts-import');
+const coreFields = new Set(['id', 'name', 'company', 'role', 'email', 'notes', 'created_at']);
+
+const normalizeHeader = (value) => {
+  if (!value) {
+    return '';
+  }
+  return String(value).trim().toLowerCase().replace(/\s+/g, '_');
+};
+
+const normalizeValue = (value) => {
+  if (value == null) {
+    return undefined;
+  }
+  const stringValue = String(value).trim();
+  return stringValue.length > 0 ? stringValue : undefined;
+};
+
+const mapRecordToContact = (record) => {
+  const name = normalizeValue(record.name);
+  if (!name) {
+    return null;
+  }
+
+  const attributes = Object.entries(record).reduce((acc, [key, value]) => {
+    if (coreFields.has(key)) {
+      return acc;
+    }
+
+    const normalized = normalizeValue(value);
+    if (normalized == null) {
+      return acc;
+    }
+
+    acc[key] = normalized;
+    return acc;
+  }, {});
+
+  return {
+    name,
+    company: normalizeValue(record.company),
+    role: normalizeValue(record.role),
+    email: normalizeValue(record.email),
+    notes: normalizeValue(record.notes),
+    attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
+  };
+};
 
 const csvUpload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      if (!fs.existsSync(importTempRoot)) {
+        fs.mkdirSync(importTempRoot, { recursive: true });
+      }
+      cb(null, importTempRoot);
+    },
+    filename: (_req, file, cb) => {
+      const extension = path.extname(file.originalname ?? '').toLowerCase() || '.csv';
+      cb(null, `${crypto.randomUUID()}${extension}`);
+    },
+  }),
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const fileExt = path.extname(file.originalname ?? '').toLowerCase();
@@ -160,23 +223,80 @@ router.delete('/:contactId', async (req, res) => {
 });
 
 router.post('/import', csvUpload.single('file'), async (req, res) => {
-  if (!req.file || !req.file.buffer) {
+  if (!req.file || !req.file.path) {
     return res.status(400).json({ error: 'CSV file is required' });
   }
-
-  const userTempDir = path.join(process.cwd(), 'api', 'data', 'contacts-import', req.user.id);
-  try {
-    if (!fs.existsSync(userTempDir)) {
-      fs.mkdirSync(userTempDir, { recursive: true });
-    }
-  } catch (error) {
-    logger.warn('[POST /api/contacts/import] Could not prepare temp directory', error);
-  }
-
-  return res.status(501).json({
-    error: 'CSV import pipeline is not implemented yet',
-    message: 'Phase 4 will implement streaming CSV ingestion and bulk writes',
+  const parser = parse({
+    columns: (header) => header.map(normalizeHeader),
+    bom: true,
+    skip_empty_lines: true,
+    trim: true,
+    relax_column_count: true,
   });
+
+  const contactsBatch = [];
+  let processedRows = 0;
+  let importedRows = 0;
+  let skippedRows = 0;
+  let upsertedCount = 0;
+  let matchedCount = 0;
+
+  const flushBatch = async () => {
+    if (contactsBatch.length === 0) {
+      return;
+    }
+
+    const result = await bulkUpsertContacts({
+      userId: req.user.id,
+      contacts: contactsBatch.splice(0, contactsBatch.length),
+    });
+    upsertedCount += result.upsertedCount;
+    matchedCount += result.matchedCount;
+  };
+
+  try {
+    fs.createReadStream(req.file.path).pipe(parser);
+
+    for await (const record of parser) {
+      processedRows += 1;
+      const contact = mapRecordToContact(record);
+      if (!contact) {
+        skippedRows += 1;
+        continue;
+      }
+
+      contactsBatch.push(contact);
+      importedRows += 1;
+
+      if (contactsBatch.length >= importChunkSize) {
+        await flushBatch();
+      }
+    }
+
+    await flushBatch();
+
+    res.status(201).json({
+      message: 'Contacts imported successfully',
+      stats: {
+        processedRows,
+        importedRows,
+        skippedRows,
+        upsertedCount,
+        matchedCount,
+      },
+    });
+  } catch (error) {
+    logger.error('[POST /api/contacts/import] CSV import failed', error);
+    res.status(500).json({ error: 'Failed to import contacts CSV' });
+  } finally {
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlink(req.file.path, (unlinkError) => {
+        if (unlinkError) {
+          logger.warn('[POST /api/contacts/import] Failed to remove temp file', unlinkError);
+        }
+      });
+    }
+  }
 });
 
 module.exports = router;
