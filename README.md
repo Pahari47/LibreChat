@@ -78,39 +78,31 @@ Open:
 
 ### 1) If the system needed to support 1,000,000 contacts, how would you redesign it?
 
-Honestly, the current approach wouldn’t scale well because it relies too much on scanning and simple matching. I’d start by moving towards a more index-driven system instead of regex-heavy searches.
+Right now the system uses simple scanning and matching, which won’t scale well for large data like 1 million contacts.
+To improve it, I would first move to an index-based search instead of regex or full scans. I would make sure fields like name, company, role, and email are properly stored and indexed. For search, I could use MongoDB text indexes initially, and if needed, switch to tools like Elasticsearch for better performance.
 
-First, I’d make sure all important fields like name, company, role, email, and tags are properly normalized and indexed. Then I’d either use MongoDB text indexes for a simpler setup or bring in something like Elasticsearch or Meilisearch for better performance and search quality.
+For handling large uploads like CSV files, I would not process them directly in the request. Instead, I would use background jobs so the upload can happen asynchronously, with progress tracking and retry support.
+To manage scaling, I would organize data based on users (user scoped data), so queries remain efficient.
 
-For data ingestion, I wouldn’t keep it tied to the request cycle. I’d introduce a background job system (like a queue) to handle large CSV imports. That way, uploads can be processed asynchronously with progress tracking, retries, and resumability. Also, I’d make the process idempotent so we don’t accidentally duplicate data.
-
-To scale horizontally, I’d scope everything by user. That way, even if the data grows massively, it stays manageable.
-
-On the API side, I’d replace page-based pagination with cursor-based pagination since it performs much better at scale. Also, instead of returning full records, I’d only return lightweight summaries in list views.
-
-Finally, I’d add caching something like Redis for frequently searched queries (like common names or companies), and even cache retrieval results for chat queries.
+For APIs, I would replace page-based pagination with cursor-based pagination because it works better with large datasets. Also, I would return only required fields instead of full data to reduce load.
+Finally, I would add caching (like Redis) for frequently searched queries to improve performance.
 
 ### 2) How would you ensure the assistant retrieves the most relevant contacts for a query?
 
-I’d approach this as a multi step retrieval problem rather than a single query.
+First, I would fetch a set of possible matches using indexed search. Then I would rank them based on relevance for example, exact name matches should rank higher than partial matches.
+I would also normalize both the stored data and user queries (like lowercase, remove punctuation) so matching is more consistent.
 
-First, I’d generate a set of candidates using indexed search. Then I’d re-rank those results using a scoring system for example, exact name or company matches should rank higher than partial matches.
-
-I’d also make the system aware of user intent. For example, if someone searches for a full name, the system should prioritize exact matches in the name field rather than loosely matching across other attributes.
-
-Normalization is really important here both the stored data and the incoming query should go through the same process (like lowercasing, removing punctuation, handling stop words) to keep things consistent.
-
-When passing data to the LLM, I’d limit it to the top few most relevant contacts (top K) and format them cleanly like name, company, role, email so the model doesn’t get confused.
+Understanding user intent is also important. For example, if a user searches a full name, the system should prioritize name matches instead of matching other fields.
+When sending data to the AI model, I would only include the top few relevant contacts and keep the format clean and structured so the model can respond correctly.
 
 ### 3) What are the limitations of your current implementation?
 
-Right now, the system is mostly heuristic-based, so it works but isn’t very smart. It doesn’t use semantic search or embeddings, so it can struggle with more natural or ambiguous queries.
+Currently, the system is mostly based on simple rules, so it may not handle complex or natural language queries very well.
+It doesn’t use semantic search (like embeddings), so it might miss relevant results if the wording is different.
+The ranking logic is basic, so sometimes results may not be perfectly ordered.
+Also, since we pass data through prompts to the AI, there is a small chance of incorrect or assumed responses.
 
-The ranking logic is also somewhat basic, so it might not always pick the best results if the query is complex.
-
-Since we rely on prompt based injection into the LLM, there’s always a chance of hallucination or the model making assumptions beyond the provided data.
-
-Also, the import process isn’t fully decoupled yet large uploads are still somewhat tied to the request lifecycle, which isn’t ideal for scalability.
-
-Observability is another gap. We don’t have a proper system to track how a query turns into results like what candidates were retrieved and why certain ones were chosen..
+The file upload process is not fully optimized yet, as large uploads are still somewhat tied to the request instead of being fully handled in the background.
+Finally, we don’t have proper monitoring or tracking to see how search results are generated, which makes debugging harder.
+Observability is another gap. We don’t have a proper system to track how a query turns into results like what candidates were retrieved and why certain ones were chosen, i dont know this one posible or not maybe posthog like tool though i never used it.
 
