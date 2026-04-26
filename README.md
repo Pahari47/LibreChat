@@ -84,7 +84,7 @@ First, I’d make sure all important fields like name, company, role, email, and
 
 For data ingestion, I wouldn’t keep it tied to the request cycle. I’d introduce a background job system (like a queue) to handle large CSV imports. That way, uploads can be processed asynchronously with progress tracking, retries, and resumability. Also, I’d make the process idempotent so we don’t accidentally duplicate data.
 
-To scale horizontally, I’d scope everything by user or tenant and consider sharding based on that. That way, even if the data grows massively, it stays manageable.
+To scale horizontally, I’d scope everything by user. That way, even if the data grows massively, it stays manageable.
 
 On the API side, I’d replace page-based pagination with cursor-based pagination since it performs much better at scale. Also, instead of returning full records, I’d only return lightweight summaries in list views.
 
@@ -94,7 +94,7 @@ Finally, I’d add caching something like Redis for frequently searched queries 
 
 I’d approach this as a multi step retrieval problem rather than a single query.
 
-First, I’d generate a set of candidates using indexed search. Then I’d re-rank those results using a scoring system for example, exact name or company matches should rank higher than partial or fuzzy matches.
+First, I’d generate a set of candidates using indexed search. Then I’d re-rank those results using a scoring system for example, exact name or company matches should rank higher than partial matches.
 
 I’d also make the system aware of user intent. For example, if someone searches for a full name, the system should prioritize exact matches in the name field rather than loosely matching across other attributes.
 
