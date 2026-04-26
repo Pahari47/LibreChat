@@ -59,6 +59,37 @@ const db = require('~/models');
 
 const loadAgent = (params) => loadAgentFn(params, { getAgent: db.getAgent, getMCPServerTools });
 const maxContactContextItems = 8;
+const contactStopWords = new Set([
+  'what',
+  'is',
+  'are',
+  'the',
+  'from',
+  'my',
+  'our',
+  'in',
+  'of',
+  'for',
+  'give',
+  'show',
+  'list',
+  'tell',
+  'me',
+  'about',
+  'who',
+  'works',
+  'work',
+  'at',
+  'with',
+  'and',
+  'contact',
+  'contacts',
+  'email',
+  'phone',
+  'we',
+  'know',
+  'do',
+]);
 
 const toAttributeEntries = (attributes) => {
   if (!attributes) {
@@ -100,6 +131,40 @@ const formatContactContext = (contacts = []) => {
   }
   lines.push('Use these contacts only when relevant to the user request.');
   return lines.join('\n');
+};
+
+const normalizeForSearch = (value = '') =>
+  String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9@\s._-]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const getQueryTokens = (query = '') =>
+  normalizeForSearch(query)
+    .split(' ')
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2 && !contactStopWords.has(token));
+
+const filterContactsByNameIntent = (query, contacts = []) => {
+  const tokens = Array.from(new Set(getQueryTokens(query)));
+  if (tokens.length < 2) {
+    return contacts;
+  }
+
+  const matched = contacts.filter((contact) => {
+    const normalizedName = normalizeForSearch(contact.name ?? '');
+    if (!normalizedName) {
+      return false;
+    }
+    return tokens.every((token) => normalizedName.includes(token));
+  });
+
+  if (matched.length > 0) {
+    return matched;
+  }
+
+  return contacts;
 };
 
 const extractMessageText = (message) => {
@@ -652,7 +717,8 @@ class AgentClient extends BaseClient {
         return;
       }
 
-      return formatContactContext(contacts);
+      const filteredContacts = filterContactsByNameIntent(trimmedQuery, contacts);
+      return formatContactContext(filteredContacts.slice(0, maxContactContextItems));
     } catch (error) {
       logger.error('[api/server/controllers/agents/client.js #useContacts] Error', error);
       return;

@@ -2400,5 +2400,42 @@ describe('AgentClient - titleConvo', () => {
       expect(context).toContain('John Doe');
       expect(context).toContain('Industry: AI Infrastructure');
     });
+
+    it('prefers exact name-token matches when query specifies a full name', async () => {
+      const mockModels = require('~/models');
+      mockModels.getRelevantContacts.mockResolvedValue([
+        {
+          name: 'Parth Bora',
+          email: 'parth.bora@example.com',
+        },
+        {
+          name: 'Parth Dixit',
+          email: 'parth.dixit@example.com',
+        },
+      ]);
+
+      const client = new AgentClient({
+        req: {
+          user: { id: 'user-123' },
+          body: {},
+          config: { memory: { disabled: true } },
+        },
+        res: {},
+        agent: {
+          id: 'agent-1',
+          endpoint: EModelEndpoint.openAI,
+          provider: EModelEndpoint.openAI,
+          instructions: 'Agent instructions',
+          model_parameters: { model: 'gpt-4' },
+          tools: [],
+        },
+        endpoint: EModelEndpoint.agents,
+      });
+
+      const context = await client.useContacts('what do we know about Parth Dixit?');
+
+      expect(context).toContain('Parth Dixit');
+      expect(context).not.toContain('Parth Bora');
+    });
   });
 });

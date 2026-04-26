@@ -129,4 +129,32 @@ describe('Contact Methods', () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].name).toBe('Anmol Bhandari');
   });
+
+  it('prioritizes exact full-name match over partial matches', async () => {
+    await contactMethods.createContact({
+      userId,
+      name: 'Parth Naik',
+      email: 'naik@example.com',
+    });
+    await contactMethods.createContact({
+      userId,
+      name: 'Parth Bora',
+      email: 'bora@example.com',
+    });
+    await contactMethods.createContact({
+      userId,
+      name: 'Parth Dixit',
+      email: 'dixit@example.com',
+      attributes: { company_name: 'Maharaj-Basu' },
+    });
+
+    const results = await contactMethods.getRelevantContacts({
+      userId,
+      query: 'what do we know about Parth Dixit?',
+      limit: 5,
+    });
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].name).toBe('Parth Dixit');
+  });
 });

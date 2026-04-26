@@ -99,6 +99,138 @@ const buildSearchRegexes = (query?: string): RegExp[] => {
   return regexes;
 };
 
+const normalizeSearchText = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9@\s._-]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const buildQueryTokens = (query?: string): string[] => {
+  if (!query) {
+    return [];
+  }
+
+  const normalized = normalizeSearchText(query);
+  if (!normalized) {
+    return [];
+  }
+
+  const stopWords = new Set([
+    'what',
+    'is',
+    'are',
+    'the',
+    'from',
+    'my',
+    'our',
+    'in',
+    'of',
+    'for',
+    'give',
+    'show',
+    'list',
+    'tell',
+    'me',
+    'about',
+    'who',
+    'works',
+    'work',
+    'at',
+    'with',
+    'and',
+    'contact',
+    'contacts',
+    'email',
+    'phone',
+    'we',
+    'know',
+    'do',
+  ]);
+
+  const tokens = normalized
+    .split(/\s+/)
+    .filter((token) => token.length >= 2 && !stopWords.has(token));
+
+  return Array.from(new Set(tokens));
+};
+
+const buildContactSearchText = (contact: t.IContactLean): string => {
+  const attributesText = contact.attributes
+    ? Object.entries(contact.attributes)
+        .map(([key, value]) => `${key} ${value}`)
+        .join(' ')
+    : '';
+
+  return normalizeSearchText(
+    [
+      contact.name,
+      contact.company,
+      contact.role,
+      contact.email,
+      contact.notes,
+      contact.attributes_search,
+      attributesText,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  );
+};
+
+const scoreContactForQuery = (contact: t.IContactLean, query: string, tokens: string[]): number => {
+  const q = normalizeSearchText(query);
+  if (!q) {
+    return 0;
+  }
+
+  const haystack = buildContactSearchText(contact);
+  const normalizedName = normalizeSearchText(contact.name ?? '');
+  const normalizedCompany = normalizeSearchText(contact.company ?? '');
+
+  let score = 0;
+
+  if (normalizedName === q) {
+    score += 300;
+  }
+  if (normalizedCompany === q) {
+    score += 220;
+  }
+  if (haystack.includes(q)) {
+    score += 180;
+  }
+  if (normalizedName && q.includes(normalizedName)) {
+    score += 140;
+  }
+  if (normalizedCompany && q.includes(normalizedCompany)) {
+    score += 100;
+  }
+
+  for (const token of tokens) {
+    if (!token) {
+      continue;
+    }
+    if (normalizedName === token) {
+      score += 90;
+    } else if (normalizedName.startsWith(token)) {
+      score += 45;
+    } else if (normalizedName.includes(token)) {
+      score += 30;
+    }
+
+    if (normalizedCompany === token) {
+      score += 70;
+    } else if (normalizedCompany.includes(token)) {
+      score += 24;
+    }
+
+    if (haystack.includes(token)) {
+      score += 10;
+    }
+  }
+
+  return score;
+};
+
 const normalizeAttributes = (attributes?: t.ContactAttributes): t.ContactAttributes | undefined => {
   if (!attributes) {
     return undefined;
@@ -315,15 +447,34 @@ export function createContactMethods(mongoose: typeof import('mongoose')) {
       { attributes_search: regex },
     ]);
 
+    const candidateLimit = Math.min(Math.max(normalizedLimit * 10, 30), 250);
     const contacts = await Contact.find({
       userId,
       $or: conditions,
     })
       .sort({ updated_at: -1 })
-      .limit(normalizedLimit)
+      .limit(candidateLimit)
       .lean<t.IContactLean[]>();
 
-    return contacts;
+    const queryTokens = buildQueryTokens(query);
+    const ranked = contacts
+      .map((contact) => ({
+        contact,
+        score: scoreContactForQuery(contact, query, queryTokens),
+      }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => {
+        if (b.score !== a.score) {
+          return b.score - a.score;
+        }
+        const aUpdated = a.contact.updated_at ? new Date(a.contact.updated_at).getTime() : 0;
+        const bUpdated = b.contact.updated_at ? new Date(b.contact.updated_at).getTime() : 0;
+        return bUpdated - aUpdated;
+      })
+      .slice(0, normalizedLimit)
+      .map((entry) => entry.contact);
+
+    return ranked;
   }
 
   return {
