@@ -29,6 +29,7 @@ jest.mock('~/server/services/MCP', () => ({
 jest.mock('~/models', () => ({
   getAgent: jest.fn(),
   getRoleByName: jest.fn(),
+  getRelevantContacts: jest.fn(),
 }));
 
 // Mock getMCPManager
@@ -2089,6 +2090,97 @@ describe('AgentClient - titleConvo', () => {
     });
   });
 
+  describe('buildMessages - contacts context injection', () => {
+    let client;
+    let mockReq;
+    let mockAgent;
+    let contactContextSpy;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+
+      mockAgent = {
+        id: 'primary-agent',
+        name: 'Primary Agent',
+        endpoint: EModelEndpoint.openAI,
+        provider: EModelEndpoint.openAI,
+        instructions: 'Primary agent instructions',
+        model_parameters: {
+          model: 'gpt-4',
+        },
+        tools: [],
+      };
+
+      mockReq = {
+        user: {
+          id: 'user-123',
+          personalization: {
+            memories: false,
+          },
+        },
+        body: {
+          endpoint: EModelEndpoint.openAI,
+        },
+        config: {
+          memory: {
+            disabled: true,
+          },
+        },
+      };
+
+      client = new AgentClient({
+        req: mockReq,
+        res: {},
+        agent: mockAgent,
+        endpoint: EModelEndpoint.agents,
+      });
+      client.conversationId = 'convo-123';
+      client.responseMessageId = 'response-123';
+      client.shouldSummarize = false;
+      client.maxContextTokens = 4096;
+      contactContextSpy = jest.spyOn(client, 'useContacts').mockResolvedValue(undefined);
+    });
+
+    it('queries relevant contacts with latest user message', async () => {
+      const messages = [
+        {
+          messageId: 'msg-1',
+          parentMessageId: null,
+          sender: 'User',
+          text: 'Who works at Acme Corp?',
+          isCreatedByUser: true,
+        },
+      ];
+
+      await client.buildMessages(messages, null, {});
+
+      expect(contactContextSpy).toHaveBeenCalledWith('');
+    });
+
+    it('injects compact contact context into agent instructions', async () => {
+      contactContextSpy.mockResolvedValue(
+        '# Relevant contacts from your workspace\n- Name: John Doe | Company: Acme Corp | Role: CTO | Email: john@acme.com | Attributes: Industry: AI Infrastructure',
+      );
+
+      const messages = [
+        {
+          messageId: 'msg-1',
+          parentMessageId: null,
+          sender: 'User',
+          text: 'Tell me about Acme contacts',
+          isCreatedByUser: true,
+        },
+      ];
+
+      await client.buildMessages(messages, null, {});
+
+      expect(client.options.agent.instructions).toContain('Relevant contacts from your workspace');
+      expect(client.options.agent.instructions).toContain('John Doe');
+      expect(client.options.agent.instructions).toContain('Acme Corp');
+      expect(client.options.agent.instructions).toContain('Industry: AI Infrastructure');
+    });
+  });
+
   describe('useMemory method - prelimAgent assignment', () => {
     let client;
     let mockReq;
@@ -2262,6 +2354,51 @@ describe('AgentClient - titleConvo', () => {
         }),
         expect.any(Object),
       );
+    });
+  });
+
+  describe('useContacts method', () => {
+    it('fetches relevant contacts and formats compact context', async () => {
+      const mockModels = require('~/models');
+      mockModels.getRelevantContacts.mockResolvedValue([
+        {
+          name: 'John Doe',
+          company: 'Acme Corp',
+          role: 'CTO',
+          email: 'john@acme.com',
+          notes: 'Interested in AI infrastructure',
+          attributes: { Industry: 'AI Infrastructure' },
+        },
+      ]);
+
+      const client = new AgentClient({
+        req: {
+          user: { id: 'user-123' },
+          body: {},
+          config: { memory: { disabled: true } },
+        },
+        res: {},
+        agent: {
+          id: 'agent-1',
+          endpoint: EModelEndpoint.openAI,
+          provider: EModelEndpoint.openAI,
+          instructions: 'Agent instructions',
+          model_parameters: { model: 'gpt-4' },
+          tools: [],
+        },
+        endpoint: EModelEndpoint.agents,
+      });
+
+      const context = await client.useContacts('Who works at Acme Corp?');
+
+      expect(mockModels.getRelevantContacts).toHaveBeenCalledWith({
+        userId: 'user-123',
+        query: 'Who works at Acme Corp?',
+        limit: 8,
+      });
+      expect(context).toContain('Relevant contacts from your workspace');
+      expect(context).toContain('John Doe');
+      expect(context).toContain('Industry: AI Infrastructure');
     });
   });
 });

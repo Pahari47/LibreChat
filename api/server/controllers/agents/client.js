@@ -75,7 +75,10 @@ const formatContactContext = (contacts = []) => {
     return '';
   }
 
-  const lines = ['# Relevant contacts from your workspace'];
+  const lines = [
+    '# Relevant contacts from your workspace',
+    'These contacts belong to the current user workspace. You may use and cite these details when the user asks about them.',
+  ];
   for (const contact of contacts) {
     const details = [
       `Name: ${contact.name}`,
@@ -97,6 +100,27 @@ const formatContactContext = (contacts = []) => {
   }
   lines.push('Use these contacts only when relevant to the user request.');
   return lines.join('\n');
+};
+
+const extractMessageText = (message) => {
+  if (!message) {
+    return '';
+  }
+
+  if (typeof message.text === 'string' && message.text.trim().length > 0) {
+    return message.text.trim();
+  }
+
+  if (!Array.isArray(message.content)) {
+    return '';
+  }
+
+  return message.content
+    .filter((part) => part?.type === ContentTypes.TEXT && typeof part.text === 'string')
+    .map((part) => part.text.trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
 };
 
 class AgentClient extends BaseClient {
@@ -379,7 +403,8 @@ class AgentClient extends BaseClient {
       }
     }
 
-    const contactContext = await this.useContacts(latestMessage?.text);
+    const latestUserQuery = extractMessageText(latestMessage);
+    const contactContext = await this.useContacts(latestUserQuery);
     if (contactContext) {
       sharedRunContextParts.push(contactContext);
     }

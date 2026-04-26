@@ -31,6 +31,74 @@ const normalizeRegex = (value?: string): RegExp | null => {
   return new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 };
 
+const buildSearchRegexes = (query?: string): RegExp[] => {
+  if (!query) {
+    return [];
+  }
+
+  const fullRegex = normalizeRegex(query);
+  const normalized = query
+    .toLowerCase()
+    .replace(/[^a-z0-9@\s._-]/gi, ' ')
+    .trim();
+  if (!normalized) {
+    return fullRegex ? [fullRegex] : [];
+  }
+
+  const stopWords = new Set([
+    'what',
+    'is',
+    'are',
+    'the',
+    'from',
+    'my',
+    'our',
+    'in',
+    'of',
+    'for',
+    'give',
+    'show',
+    'list',
+    'tell',
+    'me',
+    'about',
+    'who',
+    'works',
+    'work',
+    'at',
+    'with',
+    'and',
+    'contact',
+    'contacts',
+    'email',
+    'phone',
+  ]);
+
+  const tokens = normalized
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !stopWords.has(token));
+
+  const regexes: RegExp[] = [];
+  if (fullRegex) {
+    regexes.push(fullRegex);
+  }
+
+  const seen = new Set<string>();
+  for (const token of tokens) {
+    if (seen.has(token)) {
+      continue;
+    }
+    seen.add(token);
+    const tokenRegex = normalizeRegex(token);
+    if (tokenRegex) {
+      regexes.push(tokenRegex);
+    }
+  }
+
+  return regexes;
+};
+
 const normalizeAttributes = (attributes?: t.ContactAttributes): t.ContactAttributes | undefined => {
   if (!attributes) {
     return undefined;
@@ -233,21 +301,23 @@ export function createContactMethods(mongoose: typeof import('mongoose')) {
     limit = 12,
   }: t.RelevantContactsParams): Promise<t.IContactLean[]> {
     const normalizedLimit = Math.min(Math.max(limit, 1), 30);
-    const searchRegex = normalizeRegex(query);
-    if (!searchRegex) {
+    const searchRegexes = buildSearchRegexes(query);
+    if (searchRegexes.length === 0) {
       return [];
     }
 
+    const conditions = searchRegexes.flatMap((regex) => [
+      { name: regex },
+      { company: regex },
+      { role: regex },
+      { email: regex },
+      { notes: regex },
+      { attributes_search: regex },
+    ]);
+
     const contacts = await Contact.find({
       userId,
-      $or: [
-        { name: searchRegex },
-        { company: searchRegex },
-        { role: searchRegex },
-        { email: searchRegex },
-        { notes: searchRegex },
-        { attributes_search: searchRegex },
-      ],
+      $or: conditions,
     })
       .sort({ updated_at: -1 })
       .limit(normalizedLimit)

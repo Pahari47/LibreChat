@@ -1,5 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
-import { matchSorter } from 'match-sorter';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Plus } from 'lucide-react';
 import type { TContact } from 'librechat-data-provider';
 import {
@@ -42,7 +41,12 @@ export default function ContactsPanel() {
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { data, isLoading, isFetching } = useContactsQuery({ page, limit: pageSize });
+  const trimmedSearch = searchQuery.trim();
+  const { data, isLoading, isFetching } = useContactsQuery({
+    page,
+    limit: pageSize,
+    search: trimmedSearch || undefined,
+  });
   const contacts = data?.contacts ?? [];
   const totalPages = useMemo(() => {
     if (!data) {
@@ -51,18 +55,16 @@ export default function ContactsPanel() {
     return Math.max(1, Math.ceil(data.total / data.limit));
   }, [data]);
 
-  const filteredContacts = useMemo(() => {
-    return matchSorter(contacts, searchQuery, {
-      keys: ['name', 'company', 'role', 'email', 'notes'],
-    });
-  }, [contacts, searchQuery]);
+  useEffect(() => {
+    setPage(1);
+  }, [trimmedSearch]);
 
   const selectedContact = useMemo(() => {
     if (!selectedContactId) {
       return null;
     }
-    return filteredContacts.find((contact) => contact._id === selectedContactId) ?? null;
-  }, [filteredContacts, selectedContactId]);
+    return contacts.find((contact) => contact._id === selectedContactId) ?? null;
+  }, [contacts, selectedContactId]);
 
   const deleteMutation = useDeleteContactMutation({
     onSuccess: () => {
@@ -177,10 +179,10 @@ export default function ContactsPanel() {
 
         <div className="grid min-h-[320px] grid-cols-2 gap-2">
           <div className="space-y-1 overflow-auto rounded-lg border border-border-light p-2">
-            {filteredContacts.length === 0 ? (
+            {contacts.length === 0 ? (
               <p className="text-sm text-text-secondary">{localize('com_ui_no_contacts')}</p>
             ) : (
-              filteredContacts.map((contact) => (
+              contacts.map((contact) => (
                 <button
                   key={contact._id}
                   type="button"
